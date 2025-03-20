@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:;">
     <title>GPS定位信息</title>
     <style>
         body {
@@ -29,37 +30,88 @@
             border-radius: 4px;
             background-color: #f8f9fa;
         }
+        .error {
+            color: red;
+        }
+        .success {
+            color: green;
+        }
+        .debug-info {
+            margin-top: 20px;
+            font-size: 12px;
+            color: #666;
+            text-align: left;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .instructions {
+            margin: 20px 0;
+            padding: 10px;
+            background-color: #e9ecef;
+            border-radius: 4px;
+            text-align: left;
+        }
     </style>
 </head>
 <body>
     <div class="container">
+        <h1>GPS 定位</h1>
+        <div class="instructions">
+            <h3>使用说明：</h3>
+            <ol>
+                <li>确保您的设备已开启 GPS</li>
+                <li>点击"允许"或"始终允许"位置访问权限</li>
+                <li>如果使用手机，请确保已开启定位服务</li>
+                <li>如果遇到问题，请查看下方的调试信息</li>
+            </ol>
+        </div>
         <div class="status" id="statusMessage">正在请求位置权限...</div>
+        <button onclick="getLocation()" style="margin: 10px;">重新获取位置</button>
+        <div class="debug-info" id="debugInfo"></div>
     </div>
 
     <script>
+        let debugLog = [];
+        
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            debugLog.push(`[${timestamp}] ${message}`);
+            if (debugLog.length > 10) debugLog.shift();
+            document.getElementById('debugInfo').textContent = debugLog.join('\n');
+            console.log(`[${timestamp}] ${message}`);
+        }
+
         // 页面加载完成后自动请求位置
         document.addEventListener('DOMContentLoaded', function() {
-            getLocation();
+            log('页面加载完成');
+            // 延迟 1 秒后请求位置，给页面完全加载的时间
+            setTimeout(getLocation, 1000);
         });
 
         function getLocation() {
+            log('开始请求位置权限');
             if (!navigator.geolocation) {
-                updateStatus("您的浏览器不支持地理定位功能");
+                updateStatus("您的浏览器不支持地理定位功能", true);
                 return;
             }
 
+            updateStatus("正在请求位置权限...");
             navigator.geolocation.getCurrentPosition(
                 sendPosition,
                 showError,
                 {
                     enableHighAccuracy: true,
-                    timeout: 5000,
+                    timeout: 10000,
                     maximumAge: 0
                 }
             );
         }
 
         function sendPosition(position) {
+            log('获取到位置信息，准备发送到服务器');
             updateStatus("正在发送位置信息...");
             const locationData = {
                 latitude: position.coords.latitude,
@@ -70,22 +122,30 @@
                 speed: position.coords.speed
             };
 
+            log('位置数据: ' + JSON.stringify(locationData));
+
             fetch('/location', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify(locationData)
+                body: JSON.stringify(locationData),
+                mode: 'cors',
+                credentials: 'same-origin'
             })
-            .then(response => response.json())
+            .then(response => {
+                log('服务器响应状态: ' + response.status);
+                return response.json();
+            })
             .then(data => {
                 if (data.status === 'success') {
-                    updateStatus('位置信息已成功发送到后台');
+                    updateStatus('位置信息已成功发送到后台', false);
+                    log('位置信息发送成功');
                 }
             })
             .catch(error => {
-                console.error('Error:', error);
-                updateStatus('发送位置信息时出错: ' + error.message);
+                log('发送错误: ' + error.message);
+                updateStatus('发送位置信息时出错: ' + error.message, true);
             });
         }
 
@@ -93,23 +153,26 @@
             let errorMessage = "";
             switch(error.code) {
                 case error.PERMISSION_DENIED:
-                    errorMessage = "用户拒绝了位置请求。";
+                    errorMessage = "用户拒绝了位置请求。请确保已允许网站访问位置信息。";
                     break;
                 case error.POSITION_UNAVAILABLE:
-                    errorMessage = "位置信息不可用。";
+                    errorMessage = "位置信息不可用。请确保设备的GPS已开启。";
                     break;
                 case error.TIMEOUT:
-                    errorMessage = "获取位置信息超时。";
+                    errorMessage = "获取位置信息超时。请检查网络连接并重试。";
                     break;
                 default:
                     errorMessage = "发生未知错误。";
                     break;
             }
-            updateStatus(errorMessage);
+            log('位置错误: ' + errorMessage);
+            updateStatus(errorMessage, true);
         }
 
-        function updateStatus(message) {
-            document.getElementById('statusMessage').textContent = message;
+        function updateStatus(message, isError = false) {
+            const statusElement = document.getElementById('statusMessage');
+            statusElement.textContent = message;
+            statusElement.className = 'status ' + (isError ? 'error' : 'success');
         }
     </script>
 </body>
