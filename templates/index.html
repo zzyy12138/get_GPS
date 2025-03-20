@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPS定位信息</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f5f5f5;
+        }
+        .container {
+            text-align: center;
+            padding: 20px;
+            border-radius: 5px;
+            background-color: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            max-width: 500px;
+            width: 90%;
+        }
+        .status {
+            margin-bottom: 20px;
+            padding: 10px;
+            border-radius: 4px;
+            background-color: #f8f9fa;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="status" id="statusMessage">正在请求位置权限...</div>
+    </div>
+
+    <script>
+        // 页面加载完成后自动请求位置
+        document.addEventListener('DOMContentLoaded', function() {
+            getLocation();
+        });
+
+        function getLocation() {
+            if (!navigator.geolocation) {
+                updateStatus("您的浏览器不支持地理定位功能");
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                sendPosition,
+                showError,
+                {
+                    enableHighAccuracy: true,
+                    timeout: 5000,
+                    maximumAge: 0
+                }
+            );
+        }
+
+        function sendPosition(position) {
+            updateStatus("正在发送位置信息...");
+            const locationData = {
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+                accuracy: position.coords.accuracy,
+                altitude: position.coords.altitude,
+                heading: position.coords.heading,
+                speed: position.coords.speed
+            };
+
+            fetch('/location', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(locationData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    updateStatus('位置信息已成功发送到后台');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                updateStatus('发送位置信息时出错: ' + error.message);
+            });
+        }
+
+        function showError(error) {
+            let errorMessage = "";
+            switch(error.code) {
+                case error.PERMISSION_DENIED:
+                    errorMessage = "用户拒绝了位置请求。";
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    errorMessage = "位置信息不可用。";
+                    break;
+                case error.TIMEOUT:
+                    errorMessage = "获取位置信息超时。";
+                    break;
+                default:
+                    errorMessage = "发生未知错误。";
+                    break;
+            }
+            updateStatus(errorMessage);
+        }
+
+        function updateStatus(message) {
+            document.getElementById('statusMessage').textContent = message;
+        }
+    </script>
+</body>
+</html> 
